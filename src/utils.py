@@ -28,7 +28,7 @@ async def get_image_shape(
             partial_data = b""
             async for chunk in response.content.iter_chunked(1024):
                 partial_data += chunk
-                if len(partial_data) >= 64 * 1024:
+                if len(partial_data) >= 16 * 1024:
                     break
             img = Image.open(BytesIO(partial_data))
             return img.size
@@ -48,26 +48,28 @@ async def is_image_valid(
         url: str, headers: dict, session: aiohttp.ClientSession,
         min_shape=None, max_shape=None,
         min_size=None, max_size=None):
-    
-    cond_shape = True
-    if (min_shape or max_shape):
-        img_shape = await get_image_shape(url, headers, session)
-        if img_shape and (min_shape or max_shape):
-            w, h = img_shape
-            cond_shape = ((min_shape is None or min(w,h) >= min_shape) and
-                        (max_shape is None or max(w,h) <= max_shape))
 
-    cond_size = True
-    if (min_size or max_size):
-        img_size = await get_image_size(url, headers, session)
-        if not (img_shape and img_size):
+    if min_shape is not None or max_shape is not None:
+        img_shape = await get_image_shape(url, headers, session)
+        if not img_shape:
+            return False
+        w, h = img_shape
+        if min_shape is not None and min(w, h) < min_shape:
+            return False
+        if max_shape is not None and max(w, h) > max_shape:
             return False
 
+    if min_size is not None or max_size is not None:
+        img_size = await get_image_size(url, headers, session)
+        if not img_size:
+            return False
         size_in_kb = img_size / 1024
-        cond_size = min_size <= size_in_kb <= max_size
+        if min_size is not None and size_in_kb < min_size:
+            return False
+        if max_size is not None and size_in_kb > max_size:
+            return False
 
-
-    return cond_size and cond_shape
+    return True
 
 async def download_url(
         url: str, headers: dict, session: aiohttp.ClientSession):
