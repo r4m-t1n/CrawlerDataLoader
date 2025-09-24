@@ -54,9 +54,10 @@ async def is_image_valid(
         if not img_shape:
             return False
         w, h = img_shape
-        if min_shape is not None and min(w, h) < min_shape:
+
+        if min_shape is not None and min(w, h) < min_shape[0]:
             return False
-        if max_shape is not None and max(w, h) > max_shape:
+        if max_shape is not None and max(w, h) > max_shape[0]:
             return False
 
     if min_size is not None or max_size is not None:
@@ -81,6 +82,7 @@ async def download_url(
 
 async def download_batch(
         label: str, session: aiohttp.ClientSession,
+        seen_urls: set,
         min_shape=None, max_shape=None,
         min_size=None, max_size=None,
         first_img=0, batch_size=1):
@@ -91,11 +93,17 @@ async def download_batch(
         url, first_img = await search_image_bing(label, headers, session, first_img, batch_size=1)
         if url is None:
             continue
+
+        if url in seen_urls:
+            first_img += 1
+            continue
+
         valid = await is_image_valid(url, headers, session, min_shape, max_shape, min_size, max_size)
         if not valid:
             first_img += 1
             continue
         data = await download_url(url, headers, session)
         if data:
-            yield data, first_img
+            counter += 1
+            yield data, first_img, url
             first_img += 1
